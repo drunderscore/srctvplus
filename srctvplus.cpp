@@ -71,9 +71,11 @@ private:
   CFunctionRoute m_sendLocalDataTableHook;
   CFunctionRoute m_sendLocalWeaponDataTableHook;
   CFunctionRoute m_sendLocalActiveWeaponDataTableHook;
+  CFunctionRoute m_sendTFSharedLocalDataTableHook;
   static void* SendProxy_SendLocalDataTable(const SendProp *pProp, const void *pStructBase, const void *pData, CSendProxyRecipients *pRecipients, int objectID);
   static void* SendProxy_SendLocalWeaponDataTable(const SendProp *pProp, const void *pStructBase, const void *pData, CSendProxyRecipients *pRecipients, int objectID);
   static void* SendProxy_SendLocalActiveWeaponDataTable(const SendProp *pProp, const void *pStructBase, const void *pData, CSendProxyRecipients *pRecipients, int objectID);
+  static void* SendProxy_SendTFSharedLocalDataTable(const SendProp *pProp, const void *pStructBase, const void *pData, CSendProxyRecipients *pRecipients, int objectID);
 
   static const char** GetModEvents(IHLTVDirector *director);
   CFunctionRoute m_directorHook;
@@ -120,6 +122,10 @@ void* SrcTVPlus::SendProxy_SendLocalWeaponDataTable(const SendProp *pProp, const
 
 void* SrcTVPlus::SendProxy_SendLocalActiveWeaponDataTable(const SendProp *pProp, const void *pStructBase, const void *pData, CSendProxyRecipients *pRecipients, int objectID) {
   return SendProxy_IncludeHLTV(g_Plugin.m_sendLocalActiveWeaponDataTableHook.CallOriginalFunction<SendTableProxyFn>(), pProp, pStructBase, pData, pRecipients, objectID);
+}
+
+void* SrcTVPlus::SendProxy_SendTFSharedLocalDataTable(const SendProp *pProp, const void *pStructBase, const void *pData, CSendProxyRecipients *pRecipients, int objectID) {
+  return SendProxy_IncludeHLTV(g_Plugin.m_sendTFSharedLocalDataTableHook.CallOriginalFunction<SendTableProxyFn>(), pProp, pStructBase, pData, pRecipients, objectID);
 }
 
 // Loads events in a given resource file and inserts them into target set.
@@ -293,6 +299,22 @@ bool SrcTVPlus::Load(CreateInterfaceFn interfaceFactory, CreateInterfaceFn gameS
     return false;
   }
   m_sendLocalActiveWeaponDataTableHook.RouteFunction((void*)prop->GetDataTableProxyFn(), (void*)&SrcTVPlus::SendProxy_SendLocalActiveWeaponDataTable);
+
+  // CTFPlayerShared is an embedded network variable, meaning it won't be present in the server's list.
+  // We'll have to grab it from where it is embedded -- which is in CTFPlayer.
+  prop = GetSendProp("CTFPlayer", "m_Shared");
+  if(!prop) {
+    Error("[srctv+] Could not find CTFPlayer prop 'm_Shared'\n");
+    return false;
+  }
+
+  prop = GetSendPropInTable(prop->GetDataTable(), "tfsharedlocaldata");
+  if(!prop) {
+    Error("[srctv+] Could not find CTFPlayerShared prop 'tfsharedlocaldata'\n");
+    return false;
+  }
+
+  m_sendTFSharedLocalDataTableHook.RouteFunction((void*)prop->GetDataTableProxyFn(), (void*)&SrcTVPlus::SendProxy_SendTFSharedLocalDataTable);
 
   Warning("[srctv+] Loaded!\n");
   return true;
